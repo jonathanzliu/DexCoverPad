@@ -50,10 +50,9 @@ afterEvaluate {
     tasks.matching {
         it.name.startsWith("compile") && it.name.endsWith("Kotlin")
     }.configureEach {
-        if (it.name == "compileDebugKotlin") {
-            dependsOn("generateDebugAidl")
-        } else if (it.name == "compileReleaseKotlin") {
-            dependsOn("generateReleaseAidl")
+        when (this.name) {
+            "compileDebugKotlin" -> dependsOn("generateDebugAidl")
+            "compileReleaseKotlin" -> dependsOn("generateReleaseAidl")
         }
     }
 }
