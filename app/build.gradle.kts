@@ -40,8 +40,18 @@ android {
     sourceSets {
         getByName("main") {
             aidl.srcDirs("src/main/aidl")
+            java.srcDirs("src/main/java", "src/main/kotlin")
         }
     }
+}
+
+// Ensure AIDL compilation happens before Kotlin compilation
+tasks.withName("compileDebugKotlin") {
+    dependsOn("generateDebugAidl")
+}
+
+tasks.withName("compileReleaseKotlin") {
+    dependsOn("generateReleaseAidl")
 }
 
 dependencies {
