@@ -46,12 +46,15 @@ android {
 }
 
 // Ensure AIDL compilation happens before Kotlin compilation
-tasks {
-    named("compileDebugKotlin") {
-        dependsOn("generateDebugAidl")
-    }
-    named("compileReleaseKotlin") {
-        dependsOn("generateReleaseAidl")
+afterEvaluate {
+    tasks.matching {
+        it.name.startsWith("compile") && it.name.endsWith("Kotlin")
+    }.configureEach {
+        if (it.name == "compileDebugKotlin") {
+            dependsOn("generateDebugAidl")
+        } else if (it.name == "compileReleaseKotlin") {
+            dependsOn("generateReleaseAidl")
+        }
     }
 }
 
