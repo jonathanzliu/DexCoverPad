@@ -36,6 +36,12 @@ android {
         viewBinding = true
         buildConfig = true
     }
+
+    sourceSets {
+        getByName("main") {
+            aidl.srcDirs("src/main/aidl")
+        }
+    }
 }
 
 dependencies {
