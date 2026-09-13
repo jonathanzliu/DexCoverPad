@@ -160,7 +160,7 @@ class TouchpadView @JvmOverloads constructor(
                     val dy = (event.getY(0) - lastY) * SCROLL_SENSITIVITY
                     if (abs(dy) > 1f) {
                         try {
-                            mouseControlService?.sendScroll(-dy, 0f)
+                            mouseControlService?.sendScroll(dy, 0f)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to send scroll", e)
                         }
