@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background">#FF0F0F1A</color>
-    <color name="text_primary">#FFFFFFFF</color>
-    <color name="text_secondary">#FFB0B0C8</color>
-    <color name="accent">#FF6A6ABA</color>
+    <!-- Pure black for AMOLED panels. -->
+    <color name="background">#FF000000</color>
+    <color name="surface">#FF000000</color>
+    <color name="divider">#FF1A1A1A</color>
+    <color name="text_primary">#FFEDEDED</color>
+    <color name="text_secondary">#FF8A8A8A</color>
+    <color name="accent">#FF3D7EFF</color>
 </resources>

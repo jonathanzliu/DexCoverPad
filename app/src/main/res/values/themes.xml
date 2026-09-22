@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.DexTouchpad" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Theme.MaterialComponents is the dark variant; Light.* is the light one. -->
+    <style name="Theme.DexTouchpad" parent="Theme.MaterialComponents.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
-        <item name="colorPrimaryDark">@color/background</item>
+        <item name="colorPrimaryVariant">@color/accent</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
         <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorBackground">@color/background</item>
         <item name="android:statusBarColor">@color/background</item>
         <item name="android:navigationBarColor">@color/background</item>
     </style>

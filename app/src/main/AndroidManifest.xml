@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!--
+        Required by the platform's foregroundServiceType="connectedDevice" policy:
+        starting that FGS type needs at least one associated permission. This app
+        does not touch Wi-Fi; the permission is declared purely to satisfy the check.
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <application
         android:allowBackup="true"
@@ -31,11 +37,11 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <service
-            android:name=".services.ShizukuUserService"
-            android:enabled="true"
-            android:exported="false"
-            android:process=":user_service" />
+        <!--
+            NOTE: ShizukuUserService is deliberately NOT declared here. It is not an
+            android.app.Service; Shizuku instantiates it directly inside a shell-UID
+            process using this app's ClassLoader, passing the Application as Context.
+        -->
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

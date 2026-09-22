@@ -1,0 +1,19 @@
+# Build output
+/app/build/
+/build/
+/.gradle/
+/.kotlin/
+
+# Local SDK location
+local.properties
+
+# Scratch: sandbox build cache, downloaded NDK, reverse-engineering workspace
+/.gradle-home/
+/.home/
+/.reverse/
+/.ndk-dl/
+/.venv/
+/dist/
+
+# Scratch logs
+*.log

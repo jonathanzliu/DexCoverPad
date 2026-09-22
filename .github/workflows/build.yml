@@ -56,6 +56,12 @@ jobs:
             echo "✗ Gradle wrapper NOT found - this may cause download issues"
           fi
 
+      # The virtual mouse is built from app/src/main/cpp with ndk-build.
+      - name: Install Android NDK
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")"
+          yes | "$SDKMANAGER" --install "ndk;26.3.11579264"
+
       # ✅ FIXED: Build Debug APK (NO offline mode)
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace --no-daemon
@@ -92,7 +98,7 @@ jobs:
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: DexTouchpad-Shizuku-Debug
+          name: DexTouchpad-Debug
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: warn
@@ -102,7 +108,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
-          name: DexTouchpad-Shizuku-Release
+          name: DexTouchpad-Release
           path: app/build/outputs/apk/release/*.apk
           retention-days: 60
           if-no-files-found: warn

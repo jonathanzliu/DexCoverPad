@@ -6,7 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.example.dex_touchpad.IMouseControl
@@ -30,11 +32,26 @@ class TouchpadService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
         Log.d(TAG, "TouchpadService created")
     }
 
     override fun onBind(intent: Intent?): IBinder = localBinder
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Not sticky: if the process is killed (force-stop, low memory) the system
+        // must not silently resurrect it. A stale restart would bind a second
+        // Shizuku user service and therefore a second virtual mouse.
+        return START_NOT_STICKY
+    }
 
     override fun onDestroy() {
         super.onDestroy()
