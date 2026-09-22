@@ -1,8 +1,7 @@
 # Dex Touchpad
 
 Use a Samsung cover/outer display as a touchpad for Samsung DeX. The cursor is a
-real virtual HID mouse created through **Shizuku** — no wireless-ADB pairing, no
-persistent ADB connection, and no `adb` shell command at launch.
+real virtual HID mouse created through **Shizuku**.
 
 ## Requirements
 
@@ -11,9 +10,6 @@ persistent ADB connection, and no `adb` shell command at launch.
   - Starting Shizuku itself still needs root or wireless debugging, per Shizuku's
     own design; that is outside this app.
 - Shizuku permission granted to this app (prompted on first launch)
-
-Nothing else needs to be installed. There is no ADB key, no pairing code, and no
-`/data/local/tmp` setup step.
 
 ## Setup
 
@@ -39,7 +35,7 @@ cover display touch  ──►  MainActivity / TouchpadView
                     kernel uhid ──► "DeX Touchpad Mouse" ──► DeX cursor
 ```
 
-- `ShizukuUserService` is instantiated by Shizuku, not by us. Shizuku creates the
+- `ShizukuUserService` is instantiated by Shizuku. Shizuku creates the
   app package context, makes the `Application`, and calls the `(Context)`
   constructor with that `Application`. The class therefore must extend
   `IMouseControl.Stub` (an `IBinder`) and expose a public `(Context)` and/or `()`
@@ -82,8 +78,7 @@ cover display touch  ──►  MainActivity / TouchpadView
 | Left / Right Click buttons | Click |
 | Fullscreen button | Hide all controls and the system bars — only the pad remains |
 
-Pinch uses the keyboard device this app also registers over UHID, so it maps onto
-the same Ctrl + wheel shortcut Samsung's own trackpad uses. Recents and Back are
+Pinch uses the keyboard device this app also registers over UHID, so it maps onto Ctrl + wheel. Recents and Back are
 injected into the external/DeX display with `input -d <display> keyevent`.
 
 Sensitivity is adjustable with the slider (0.1×–5.0×, applied on the app side).
