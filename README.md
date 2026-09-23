@@ -8,7 +8,7 @@ real virtual HID mouse created through **Shizuku**. Compared the original, this 
 - Mouse dragging (moving windows, icons, etc.)
 - Gestures (pinch to zoom, three finger tap for back, three fingers drag up for alt-tab, more maybe TBD)
 
-Original seems to have been written with an AI model and later abandonded; this fork uses DeepSeek v4.1-flash with DeepSeek Harness. Tested on a Z Fold6 with the inner screen removed, but should work on the Flip series as well.
+Original seems to have been written with an AI model and later abandonded; this fork uses DeepSeek v4.1-flash with DeepSeek Harness. Tested on a Z Fold6 with the inner screen removed but should work on the Flip series as well. The original also included some pre-built binaries which have been rewritten and open-sourced here.
 
 ## Requirements
 
