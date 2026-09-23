@@ -26,7 +26,8 @@ private const val PREFS_NAME = "dex_touchpad_prefs"
 private const val PREF_SENSITIVITY = "sensitivity"
 private const val DEFAULT_SENSITIVITY = 1.0f
 private const val MAX_DELTA_PER_EVENT = 50.0f
-private const val SCROLL_SENSITIVITY = 0.1f
+/** Wheel notches per scrolled pixel; halved from 0.1 because it scrolled too fast. */
+private const val SCROLL_SENSITIVITY = 0.05f
 
 /** Pointer-distance change (px) per zoom step; smaller = more sensitive. */
 private const val PINCH_SENSITIVITY = 0.008f

@@ -16,15 +16,6 @@
         android:gravity="center">
 
         <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
             android:id="@+id/status_text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -48,30 +39,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:layout_marginTop="16dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="12dp">
-
-            <Button
-                android:id="@+id/btn_left_click"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Left Click"
-                android:layout_marginEnd="8dp" />
-
-            <Button
-                android:id="@+id/btn_right_click"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Right Click"
-                android:layout_marginStart="8dp" />
-
-        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
@@ -98,7 +65,9 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginEnd="8dp"
+                android:layout_marginEnd="4dp"
+                android:maxLines="1"
+                android:textSize="11sp"
                 android:text="Fullscreen" />
 
             <Button
@@ -106,19 +75,34 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:maxLines="1"
+                android:textSize="11sp"
                 android:text="Reconnect" />
+
+            <Button
+                android:id="@+id/btn_info"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:maxLines="1"
+                android:textSize="11sp"
+                android:text="Info" />
 
         </LinearLayout>
 
         <TextView
+            android:id="@+id/gesture_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="Tap = click · Drag = move · Two-finger tap = right click\nTwo-finger drag = scroll · Pinch = zoom · Tap/hold then drag = drag\nThree-finger tap = Back · swipe up = Recents\nFour-finger tap = exit fullscreen"
             android:textSize="12sp"
             android:textColor="@color/text_secondary"
-            android:gravity="center" />
+            android:gravity="center"
+            android:visibility="gone" />
 
     </LinearLayout>
 

@@ -30,8 +30,6 @@ private const val PREFS_NAME = "dex_touchpad_prefs"
 private const val PREF_SENSITIVITY = "sensitivity"
 private const val DEFAULT_SENSITIVITY = 1.0f
 
-private const val BUTTON_LEFT = 1
-private const val BUTTON_RIGHT = 2
 private const val REBIND_DELAY_MS = 1000L
 
 class MainActivity : AppCompatActivity() {
@@ -45,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var mouseControl: IMouseControl? = null
     private var isUserServiceBound = false
     private var isFullscreen = false
+    private var isInfoVisible = false
 
     /**
      * The Shizuku user service runs the UHid code as shell in its own process.
@@ -258,10 +257,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupButtons() {
-        binding.btnLeftClick.setOnClickListener { click(BUTTON_LEFT) }
-        binding.btnRightClick.setOnClickListener { click(BUTTON_RIGHT) }
         binding.btnFullscreen.setOnClickListener { toggleFullscreen() }
         binding.btnReconnect.setOnClickListener { reconnect() }
+        binding.btnInfo.setOnClickListener { toggleInfo() }
+    }
+
+    /** Keeps the gesture cheat-sheet out of the way until it is asked for. */
+    private fun toggleInfo() {
+        isInfoVisible = !isInfoVisible
+        binding.gestureInfo.visibility = if (isInfoVisible) View.VISIBLE else View.GONE
+        binding.btnInfo.text = if (isInfoVisible) "Hide" else "Info"
     }
 
     /**
@@ -287,14 +292,6 @@ class MainActivity : AppCompatActivity() {
             controller.show(WindowInsetsCompat.Type.systemBars())
         }
         binding.btnFullscreen.text = if (isFullscreen) "Exit fullscreen" else "Fullscreen"
-    }
-
-    private fun click(button: Int) {
-        try {
-            mouseControl?.sendClick(button)
-        } catch (e: Exception) {
-            Log.w(TAG, "sendClick($button) failed", e)
-        }
     }
 
     private fun reconnect() {
