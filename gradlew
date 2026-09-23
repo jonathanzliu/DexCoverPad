@@ -35,12 +35,23 @@ DIST_NAME=$(basename "$ZIP_NAME" .zip)
 INSTALL_DIR="$DIST_DIR/$DIST_NAME"
 ZIP_PATH="$DIST_DIR/$ZIP_NAME"
 
-# --- Download if not already present ---
-if [ ! -d "$INSTALL_DIR" ]; then
+# --- Locate an already-installed Gradle binary ---
+# The install directory merely *existing* is not proof of a usable install:
+# the Gradle cache restored in CI can hand back wrapper/dists/<dist>/ empty or
+# half-extracted. Look for the binary itself, and reinstall when it is absent.
+find_gradle() {
+  find "$INSTALL_DIR" -type f -name gradle 2>/dev/null | head -n 1
+}
+
+GRADLE_BIN="$(find_gradle)"
+
+if [ -z "$GRADLE_BIN" ]; then
   echo "Downloading $distributionUrl ..."
+  rm -rf "$INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR"
 
   if command -v curl >/dev/null 2>&1; then
-    curl -L -o "$ZIP_PATH" "$distributionUrl"
+    curl -fL -o "$ZIP_PATH" "$distributionUrl"
   elif command -v wget >/dev/null 2>&1; then
     wget -O "$ZIP_PATH" "$distributionUrl"
   else
@@ -49,23 +60,26 @@ if [ ! -d "$INSTALL_DIR" ]; then
   fi
 
   echo "Extracting $ZIP_NAME ..."
-  mkdir -p "$INSTALL_DIR"
   unzip -q "$ZIP_PATH" -d "$INSTALL_DIR"
 
-  # Move inner folder up if needed
+  # Move inner folder up if needed. Non-fatal: the lookup below is recursive,
+  # so an unflattened layout still works and reports a clear error if not.
   INNER_DIR=$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
   if [ -n "$INNER_DIR" ]; then
-    mv "$INNER_DIR"/* "$INSTALL_DIR/"
-    rmdir "$INNER_DIR"
+    mv "$INNER_DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
+    rmdir "$INNER_DIR" 2>/dev/null || true
   fi
+
+  GRADLE_BIN="$(find_gradle)"
 fi
 
-# --- Locate Gradle binary ---
-GRADLE_BIN=$(find "$INSTALL_DIR" -type f -name "gradle" | head -n 1)
-
-if [ ! -x "$GRADLE_BIN" ]; then
-  chmod +x "$GRADLE_BIN"
+if [ -z "$GRADLE_BIN" ]; then
+  echo "ERROR: no 'gradle' binary found under $INSTALL_DIR" >&2
+  echo "Delete that directory and re-run to force a fresh download." >&2
+  exit 1
 fi
+
+chmod +x "$GRADLE_BIN"
 
 # --- Execute Gradle ---
 exec "$GRADLE_BIN" "$@"
