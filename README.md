@@ -1,7 +1,14 @@
 # Dex Touchpad
 
 Use a Samsung cover/outer display as a touchpad for Samsung DeX. The cursor is a
-real virtual HID mouse created through **Shizuku**.
+real virtual HID mouse created through **Shizuku**. Compared the original, this fork adds a few features, namely:
+
+- AMOLED black theme
+- Fullscreen
+- Mouse dragging (moving windows, icons, etc.)
+- Gestures (pinch to zoom, three finger tap for back, three fingers drag up for alt-tab, more maybe TBD)
+
+Original seems to have been written with an AI model and later abandonded; this fork uses DeepSeek v4.1-flash with DeepSeek Harness. Tested on a Z Fold6 with the inner screen removed, but should work on the Flip series as well.
 
 ## Requirements
 
