@@ -79,11 +79,11 @@ cover display touch  ──►  MainActivity / TouchpadView
 | Two-finger tap | Right click |
 | Two-finger drag | Scroll |
 | Pinch in / out | Zoom (Ctrl + scroll wheel) |
-| Three-finger tap | System Back (sent to the external/DeX display) |
+| Three-finger tap | System Back |
 | Three-finger swipe up | Recents |
 | Four-finger tap | Leave fullscreen |
 | Left / Right Click buttons | Click |
-| Fullscreen button | Hide all controls and the system bars — only the pad remains |
+| Fullscreen button | Hide all controls and the system bars |
 
 Pinch uses the keyboard device this app also registers over UHID, so it maps onto Ctrl + wheel. Recents and Back are
 injected into the external/DeX display with `input -d <display> keyevent`.
