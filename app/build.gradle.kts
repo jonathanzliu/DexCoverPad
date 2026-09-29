@@ -23,8 +23,8 @@ android {
         applicationId = "com.example.dex_touchpad.shizuku"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "2.6"
+        versionCode = 10
+        versionName = "2.8"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")

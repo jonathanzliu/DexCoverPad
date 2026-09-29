@@ -152,6 +152,7 @@ class TouchpadView @JvmOverloads constructor(
     // Two-finger tracking
     private var initialDistance = 0f
     private var lastDistance = 0f
+    private var twoLastX = 0f
     private var twoLastY = 0f
 
     /** True while a real injected touch pinch is driving the zoom. */
@@ -159,6 +160,9 @@ class TouchpadView @JvmOverloads constructor(
 
     /** Finger distance when the injected pinch began, for the absolute ratio. */
     private var pinchBaseDistance = 0f
+
+    /** True while a real injected touch drag is driving the scroll. */
+    private var scrollTouch = false
 
     // Three-finger tracking (average position at the start of the gesture)
     private var threeStartX = 0f
@@ -285,6 +289,12 @@ class TouchpadView @JvmOverloads constructor(
                 beginPinch(initialDistance)
             } else if (abs(ay - twoLastY) > TWO_FINGER_SLOP_PX) {
                 mode = Mode.SCROLL
+                twoLastX = averageX(event)
+                twoLastY = ay
+                // Stream real contacts so the app scrolls through its own touch
+                // pipeline and computes the fling itself, instead of stepping
+                // through discrete wheel notches.
+                beginScrollTouch()
             }
         }
 
@@ -305,12 +315,24 @@ class TouchpadView @JvmOverloads constructor(
                 }
             }
             Mode.SCROLL -> {
-                val dy = (ay - twoLastY) * SCROLL_SENSITIVITY
+                val ax = averageX(event)
+                val dxPx = ax - twoLastX
+                val dyPx = ay - twoLastY
+                twoLastX = ax
                 twoLastY = ay
-                if (dy != 0f) {
+                if (dxPx != 0f || dyPx != 0f) {
                     multiMoved = true
-                    // Positive when the fingers move down, matching the wheel convention.
-                    sendScroll(dy)
+                    if (scrollTouch) {
+                        // Normalised, so a full-height swipe scrolls a full
+                        // display height whatever the two screen sizes are.
+                        scrollTouchUpdate(
+                            dxPx / width.coerceAtLeast(1),
+                            dyPx / height.coerceAtLeast(1)
+                        )
+                    } else {
+                        // Positive when the fingers move down, matching the wheel convention.
+                        sendScroll(dyPx * SCROLL_SENSITIVITY)
+                    }
                 }
             }
             else -> Unit
@@ -407,6 +429,7 @@ class TouchpadView @JvmOverloads constructor(
 
     private fun resetGesture() {
         endPinch()
+        endScrollTouch()
         isTouching = false
         isMultiTouch = false
         moved = false
@@ -526,6 +549,39 @@ class TouchpadView @JvmOverloads constructor(
             mouseControlService?.pinchEnd()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to end pinch", e)
+        }
+    }
+
+    /**
+     * Tries to start a real injected scroll drag. If it is unavailable the wheel
+     * fallback is used for the whole gesture, so behaviour degrades rather than
+     * breaking when there is no external display.
+     */
+    private fun beginScrollTouch() {
+        scrollTouch = try {
+            mouseControlService?.scrollBegin() == true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to begin touch scroll", e)
+            false
+        }
+        Log.i(TAG, "scroll begin: injecting=$scrollTouch")
+    }
+
+    private fun scrollTouchUpdate(fracX: Float, fracY: Float) {
+        try {
+            mouseControlService?.scrollUpdate(fracX, fracY)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update touch scroll", e)
+        }
+    }
+
+    private fun endScrollTouch() {
+        if (!scrollTouch) return
+        scrollTouch = false
+        try {
+            mouseControlService?.scrollEnd()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to end touch scroll", e)
         }
     }
 

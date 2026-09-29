@@ -27,6 +27,23 @@ interface IMouseControl {
     /** Lifts both injected contacts. Safe to call without a matching begin(). */
     void pinchEnd();
 
+    /**
+     * Starts a real two-finger drag on the external display. The app's own touch
+     * pipeline turns it into a scroll and computes the fling, so momentum is the
+     * platform's rather than something we simulate. False means fall back to
+     * sendScroll() on the wheel device.
+     */
+    boolean scrollBegin();
+
+    /**
+     * Moves the contacts. Fractions of the touchpad's own width/height, so a
+     * full-height swipe scrolls a full display height whatever the screen sizes.
+     */
+    void scrollUpdate(float fracX, float fracY);
+
+    /** Lifts both injected contacts and lets the app fling. */
+    void scrollEnd();
+
     /** Injects a system BACK key event. */
     void sendBack();
 

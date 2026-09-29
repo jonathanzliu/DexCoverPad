@@ -7,6 +7,9 @@ package com.example.dex_touchpad.services;
  * HID reports itself, keeping the button state in every report so that dragging
  * works. It must run in a process with access to {@code /dev/uhid} (the Shizuku
  * user service runs as shell, which is in the {@code uhid} group).
+ *
+ * The mouse is deliberately relative: Android has no absolute cursor device, so
+ * the pointer position is not knowable from here.
  */
 public final class UhidNative {
 

@@ -11,6 +11,7 @@ import androidx.annotation.Keep
 import com.example.dex_touchpad.IMouseControl
 import java.io.File
 import kotlin.math.floor
+import kotlin.math.min
 
 private const val TAG = "ShizukuUserService"
 private const val CLICK_HOLD_MS = 50L
@@ -18,6 +19,12 @@ private const val CLICK_SETTLE_MS = 60L
 
 /** Keep Ctrl held this long after the last pinch step (Ctrl + wheel = zoom). */
 private const val CTRL_HOLD_MS = 300L
+
+/** Contact separation at the start of an injected pinch, as a fraction of the display. */
+private const val PINCH_SPAN_FRACTION = 0.18f
+
+/** Contact separation for an injected two-finger scroll drag. */
+private const val SCROLL_SPAN_FRACTION = 0.10f
 
 /** android.view.Display.TYPE_EXTERNAL (the constant itself is hidden API). */
 private const val DISPLAY_TYPE_EXTERNAL = 2
@@ -68,9 +75,21 @@ class ShizukuUserService : IMouseControl.Stub {
 
     private var ctrlHeld = false
 
-    /** Live touch pinch on the external display; null between gestures. */
-    private var pinchInjector: PinchInjector? = null
-    private var pinchActive = false
+    /** Live injected touch gesture on the external display; null between gestures. */
+    private var touchInjector: TouchInjector? = null
+    private var gestureActive = false
+
+    /** Half the contact separation when a pinch started. */
+    private var pinchHalfSpan = 0f
+
+    /** Centre the injected contacts are built around, in display pixels. */
+    private var anchorX = 0f
+    private var anchorY = 0f
+
+    /** Half the contact separation for a scroll, and the running contact centre. */
+    private var scrollHalfSpan = 0f
+    private var scrollCenterX = 0f
+    private var scrollCenterY = 0f
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -258,16 +277,19 @@ class ShizukuUserService : IMouseControl.Stub {
     override fun pinchBegin(): Boolean {
         if (!isReady) return false
         return try {
-            val displayId = externalDisplayId()
-            if (displayId == null) {
-                Log.i(TAG, "pinchBegin: no external display, wheel fallback")
-                return false
-            }
-            val injector = PinchInjector(context, displayId)
-            if (!injector.begin()) return false
-            pinchInjector = injector
-            pinchActive = true
-            Log.i(TAG, "pinchBegin: injecting touch on display $displayId")
+            val injector = newInjector("pinchBegin") ?: return false
+            val cx = injector.width / 2f
+            val cy = injector.height / 2f
+            anchorX = cx
+            anchorY = cy
+            pinchHalfSpan = min(injector.width, injector.height) * PINCH_SPAN_FRACTION / 2f
+            val started = injector.begin(
+                injector.clampX(cx - pinchHalfSpan), injector.clampY(cy),
+                injector.clampX(cx + pinchHalfSpan), injector.clampY(cy)
+            )
+            if (!started) return false
+            touchInjector = injector
+            gestureActive = true
             true
         } catch (t: Throwable) {
             Log.e(TAG, "pinchBegin failed", t)
@@ -276,23 +298,100 @@ class ShizukuUserService : IMouseControl.Stub {
     }
 
     override fun pinchUpdate(scale: Float) {
-        if (!pinchActive) return
+        if (!gestureActive) return
         try {
-            pinchInjector?.update(scale)
+            val injector = touchInjector ?: return
+            val cx = anchorX
+            val cy = anchorY
+            val half = (pinchHalfSpan * scale)
+                .coerceIn(injector.minSpan() / 2f, injector.maxSpan() / 2f)
+            injector.move(
+                injector.clampX(cx - half), injector.clampY(cy),
+                injector.clampX(cx + half), injector.clampY(cy)
+            )
         } catch (t: Throwable) {
             Log.e(TAG, "pinchUpdate failed", t)
         }
     }
 
-    override fun pinchEnd() {
-        if (!pinchActive) return
-        pinchActive = false
-        try {
-            pinchInjector?.end()
+    override fun pinchEnd() = endTouchGesture("pinch")
+
+    /**
+     * Starts a two-finger drag on the external display. The receiving app turns
+     * it into a scroll and derives the fling from the motion we stream, so the
+     * momentum is the platform's own — there is nothing to simulate here, only
+     * clean positions and timestamps.
+     */
+    override fun scrollBegin(): Boolean {
+        if (!isReady) return false
+        return try {
+            val injector = newInjector("scrollBegin") ?: return false
+            scrollHalfSpan = min(injector.width, injector.height) * SCROLL_SPAN_FRACTION / 2f
+            scrollCenterX = injector.width / 2f
+            scrollCenterY = injector.height / 2f
+            val started = injector.begin(
+                injector.clampX(scrollCenterX - scrollHalfSpan), injector.clampY(scrollCenterY),
+                injector.clampX(scrollCenterX + scrollHalfSpan), injector.clampY(scrollCenterY)
+            )
+            if (!started) return false
+            touchInjector = injector
+            gestureActive = true
+            true
         } catch (t: Throwable) {
-            Log.e(TAG, "pinchEnd failed", t)
+            Log.e(TAG, "scrollBegin failed", t)
+            false
+        }
+    }
+
+    override fun scrollUpdate(fracX: Float, fracY: Float) {
+        if (!gestureActive) return
+        try {
+            val injector = touchInjector ?: return
+            // Keep the contacts on the display: a touch that leaves the view
+            // ends the gesture, and a clamped edge just stops the scroll.
+            scrollCenterX = (scrollCenterX + fracX * injector.width)
+                .coerceIn(scrollHalfSpan, (injector.width - scrollHalfSpan).coerceAtLeast(scrollHalfSpan))
+            scrollCenterY = (scrollCenterY + fracY * injector.height)
+                .coerceIn(0f, injector.height)
+            injector.move(
+                injector.clampX(scrollCenterX - scrollHalfSpan), injector.clampY(scrollCenterY),
+                injector.clampX(scrollCenterX + scrollHalfSpan), injector.clampY(scrollCenterY)
+            )
+        } catch (t: Throwable) {
+            Log.e(TAG, "scrollUpdate failed", t)
+        }
+    }
+
+    override fun scrollEnd() = endTouchGesture("scroll")
+
+    /**
+     * Builds an injector for the external display, or returns null (with a log
+     * saying why) so the caller can fall back to the wheel devices.
+     */
+    private fun newInjector(label: String): TouchInjector? {
+        val displayId = externalDisplayId()
+        if (displayId == null) {
+            Log.i(TAG, "$label: no external display, wheel fallback")
+            return null
+        }
+        val injector = TouchInjector(context, displayId)
+        if (!injector.isAvailable) {
+            Log.i(TAG, "$label: injection unavailable, wheel fallback")
+            return null
+        }
+        Log.i(TAG, "$label: injecting touch on display $displayId")
+        return injector
+    }
+
+    private fun endTouchGesture(label: String) {
+        if (!gestureActive) return
+        gestureActive = false
+        try {
+            touchInjector?.end()
+        } catch (t: Throwable) {
+            Log.e(TAG, "$label end failed", t)
         } finally {
-            pinchInjector = null
+            touchInjector = null
         }
     }
 

@@ -12,23 +12,24 @@ import android.view.MotionEvent
 import kotlin.math.min
 
 /**
- * Injects a genuine two-finger pinch as real touch events on the external display.
+ * Streams a genuine two-contact touch gesture onto the external display.
  *
- * This replaces the Ctrl+wheel approximation: a wheel notch is a discrete,
- * animated zoom step, which is what made pinching feel notchy. Two moving
- * contacts are an ordinary touch gesture, so every app that can pinch at all
- * handles this the same way it handles fingers on a real touchscreen.
+ * Both pinch-zoom and two-finger scrolling are built on this. Injecting real
+ * contacts rather than wheel notches means the receiving app runs its ordinary
+ * touch pipeline: zoom tracks the fingers, and a scroll gets the same
+ * velocity-based fling and overscroll it would from a real touchscreen. The
+ * momentum is therefore the app's own — there is no inertia to simulate here,
+ * only clean positions and timestamps for its VelocityTracker to read.
  *
  * Runs in the Shizuku user service (uid 2000 / shell), which holds
- * INJECT_EVENTS — that is what makes `input -d <id> keyevent` work from the
- * same process. Both entry points are hidden API, reached by reflection;
- * Shizuku-hosted services are not subject to the hidden-API blocklist, which
- * the existing Display.getType() call in this service already relies on.
+ * INJECT_EVENTS — the same reason `input -d <id> keyevent` works from it. Both
+ * entry points are hidden API, reached by reflection; Shizuku-hosted services
+ * are not subject to the hidden-API blocklist, which the existing
+ * Display.getType() call in this service already relies on.
  *
- * Every failure path is soft: if anything is unavailable the caller falls back
- * to Ctrl+wheel zoom.
+ * Every failure path is soft: the caller falls back to the wheel devices.
  */
-internal class PinchInjector(
+internal class TouchInjector(
     context: Context?,
     private val displayId: Int
 ) {
@@ -53,9 +54,11 @@ internal class PinchInjector(
 
     private var downTime = 0L
     private var lastMoveTime = 0L
-    private var centerX = 0f
-    private var centerY = 0f
-    private var baseSpan = 0f
+
+    private var x0 = 0f
+    private var y0 = 0f
+    private var x1 = 0f
+    private var y1 = 0f
 
     val isAvailable: Boolean
         get() = inputManager != null &&
@@ -63,81 +66,70 @@ internal class PinchInjector(
             setDisplayIdMethod != null &&
             displaySize != null
 
+    val width: Float get() = displaySize?.x?.toFloat() ?: 0f
+    val height: Float get() = displaySize?.y?.toFloat() ?: 0f
+
     /**
-     * Places two contacts around the display centre. Returns false when
-     * injection is not usable, so the caller can use the wheel fallback.
+     * Places both contacts. Returns false when injection is not usable, so the
+     * caller can use the wheel fallback for the whole gesture.
      */
-    fun begin(): Boolean {
+    fun begin(px0: Float, py0: Float, px1: Float, py1: Float): Boolean {
         if (!isAvailable) {
-            Log.w(TAG, "pinch injection unavailable (inputManager=${inputManager != null}, " +
-                "inject=${injectMethod != null}, setDisplayId=${setDisplayIdMethod != null}, " +
-                "size=${displaySize != null})")
+            Log.w(
+                TAG,
+                "touch injection unavailable (inputManager=${inputManager != null}, " +
+                    "inject=${injectMethod != null}, setDisplayId=${setDisplayIdMethod != null}, " +
+                    "size=${displaySize != null})"
+            )
             return false
         }
-        val size = displaySize!!
-        centerX = size.x / 2f
-        centerY = size.y / 2f
-        // A span in the same ballpark as a real two-finger pinch on a monitor.
-        baseSpan = min(size.x, size.y) * BASE_SPAN_FRACTION
-
+        x0 = px0; y0 = py0; x1 = px1; y1 = py1
         downTime = SystemClock.uptimeMillis()
         lastMoveTime = 0L
 
         // ACTION_DOWN carries the first pointer only; the second arrives as
         // ACTION_POINTER_DOWN. Injecting an invalid pointer count for the
         // action makes the framework drop the whole gesture.
-        val half = baseSpan / 2f
-        if (!send(ACTION_DOWN, pointerCount = 1, count = 1, x0 = centerX - half, y0 = centerY)) {
-            return false
-        }
-        return send(
-            MotionEvent.ACTION_POINTER_DOWN, pointerCount = 2, count = 2,
-            x0 = centerX - half, y0 = centerY, x1 = centerX + half, y1 = centerY
-        )
+        if (!send(ACTION_DOWN, count = 1, x0 = x0, y0 = y0)) return false
+        return send(MotionEvent.ACTION_POINTER_DOWN, count = 2, x0 = x0, y0 = y0, x1 = x1, y1 = y1)
     }
 
-    /**
-     * @param scale current finger distance divided by the distance at the start
-     *              of the gesture. 1.0 leaves the contacts where they began.
-     */
-    fun update(scale: Float) {
+    /** Moves both contacts. Safe to call with the same values repeatedly. */
+    fun move(px0: Float, py0: Float, px1: Float, py1: Float) {
         if (!isAvailable) return
-        // Touch panels deliver ~120 Hz; no point in more binder traffic.
+        // Touch panels deliver ~120 Hz; more binder traffic buys nothing and
+        // can bunch events up enough to confuse velocity tracking.
         val now = SystemClock.uptimeMillis()
         if (now - lastMoveTime < MIN_MOVE_INTERVAL_MS) return
         lastMoveTime = now
 
-        val span = (baseSpan * scale).coerceIn(minSpan(), maxSpan())
-        val half = span / 2f
-        send(
-            MotionEvent.ACTION_MOVE, pointerCount = 2, count = 2,
-            x0 = centerX - half, y0 = centerY, x1 = centerX + half, y1 = centerY
-        )
+        x0 = px0; y0 = py0; x1 = px1; y1 = py1
+        send(MotionEvent.ACTION_MOVE, count = 2, x0 = x0, y0 = y0, x1 = x1, y1 = y1)
     }
 
-    /** Lifts both contacts. Safe to call even if the gesture never started. */
+    /** Lifts both contacts. Safe to call without a matching [begin]. */
     fun end() {
         if (!isAvailable) return
-        val half = (baseSpan / 2f).coerceAtLeast(1f)
-        send(
-            MotionEvent.ACTION_POINTER_UP, pointerCount = 2, count = 2,
-            x0 = centerX - half, y0 = centerY, x1 = centerX + half, y1 = centerY
-        )
-        send(ACTION_UP, pointerCount = 1, count = 1, x0 = centerX - half, y0 = centerY)
+        send(MotionEvent.ACTION_POINTER_UP, count = 2, x0 = x0, y0 = y0, x1 = x1, y1 = y1)
+        send(ACTION_UP, count = 1, x0 = x0, y0 = y0)
         lastMoveTime = 0L
     }
 
-    private fun minSpan(): Float = 1f
+    /** Keeps a contact inside the display so the app never sees off-screen touches. */
+    fun clampX(v: Float): Float = v.coerceIn(0f, (width - 1f).coerceAtLeast(0f))
 
-    private fun maxSpan(): Float = displaySize?.let { min(it.x, it.y) * 0.9f } ?: 1f
+    fun clampY(v: Float): Float = v.coerceIn(0f, (height - 1f).coerceAtLeast(0f))
+
+    fun minSpan(): Float = 1f
+
+    fun maxSpan(): Float = min(width, height) * 0.9f
 
     /**
      * Builds and injects one frame. [count] is how many of the two pointers this
-     * frame actually carries; [pointerCount] is the frame's action index.
+     * frame actually carries.
      */
     private fun send(
         action: Int,
-        pointerCount: Int,
         count: Int,
         x0: Float,
         y0: Float,
@@ -194,7 +186,7 @@ internal class PinchInjector(
                 0
             )
         } catch (t: Throwable) {
-            Log.e(TAG, "could not build pinch MotionEvent", t)
+            Log.e(TAG, "could not build touch MotionEvent", t)
             return false
         }
 
@@ -204,7 +196,7 @@ internal class PinchInjector(
             if (!ok) Log.w(TAG, "injectInputEvent rejected action=$encoded")
             ok
         } catch (t: Throwable) {
-            Log.e(TAG, "pinch injection failed", t)
+            Log.e(TAG, "touch injection failed", t)
             false
         } finally {
             event.recycle()
@@ -212,16 +204,14 @@ internal class PinchInjector(
     }
 
     private companion object {
-        const val TAG = "PinchInjector"
+        const val TAG = "TouchInjector"
 
         /** android.hardware.input.InputManager.INJECT_INPUT_EVENT_MODE_ASYNC */
         const val INJECT_MODE_ASYNC = 0
 
-        /** ACTION_DOWN has no pointer index to encode. */
         const val ACTION_DOWN = MotionEvent.ACTION_DOWN
         const val ACTION_UP = MotionEvent.ACTION_UP
 
-        const val BASE_SPAN_FRACTION = 0.18f
         const val MIN_MOVE_INTERVAL_MS = 8L
     }
 }

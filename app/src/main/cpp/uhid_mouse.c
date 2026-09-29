@@ -73,7 +73,16 @@ struct uhid_event {
 #define EVENT_SIZE ((int)sizeof(struct uhid_event))
 #define REPORT_SIZE 4
 
-/* Standard 3-button + wheel relative mouse. 4-byte report. */
+/*
+ * Standard 3-button + wheel RELATIVE mouse. 4-byte report.
+ *
+ * Relative, not absolute: Android has no absolute cursor device. A pointer
+ * device with absolute X/Y is reclassified (we measured ROTARY_ENCODER when
+ * only the wheel stayed relative), and absolute pointing devices otherwise
+ * become touchpads whose positions the framework converts back to relative
+ * motion. So the pointer position stays unknowable and gestures must anchor
+ * somewhere we choose rather than on the cursor.
+ */
 static const uint8_t kReportDescriptor[] = {
     0x05, 0x01,             /* Usage Page (Generic Desktop)        */
     0x09, 0x02,             /* Usage (Mouse)                       */
