@@ -1,7 +1,7 @@
 # Dex Touchpad
 
 Use a Samsung cover/outer display as a touchpad for Samsung DeX. The cursor is a
-real virtual HID mouse created through **Shizuku**. Compared the original, this fork adds a few features, namely:
+real virtual HID mouse created through **Shizuku**. Compared the original, this fork adds a f oew features, namely:
 
 - AMOLED black theme
 - Fullscreen
@@ -116,8 +116,7 @@ MIT — see `LICENSE`. Third-party components and their licenses are listed in
 `THIRD_PARTY_NOTICES.md`.
 
 This is a fork of [Gh0strab/DexCoverPad](https://github.com/Gh0strab/DexCoverPad)
-by Will White. The original wireless-ADB app is his work; this fork replaces the
-transport with Shizuku, adds the native UHID library and the trackpad gestures.
+by Will White.
 
 ## Packaging
 
