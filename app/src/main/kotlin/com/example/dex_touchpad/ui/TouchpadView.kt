@@ -138,6 +138,9 @@ class TouchpadView @JvmOverloads constructor(
     private var pendingDeltaX = 0f
     private var pendingDeltaY = 0f
 
+    /** True while a coalesced movement flush is already queued. */
+    private var flushScheduled = false
+
     private var isTouching = false
     private var isMultiTouch = false
     private var moved = false
@@ -374,8 +377,14 @@ class TouchpadView @JvmOverloads constructor(
         if (moved) {
             pendingDeltaX += (dx * sensitivity).coerceIn(-MAX_DELTA_PER_EVENT, MAX_DELTA_PER_EVENT)
             pendingDeltaY += (dy * sensitivity).coerceIn(-MAX_DELTA_PER_EVENT, MAX_DELTA_PER_EVENT)
-            handler.removeCallbacks(flushMovement)
-            handler.postDelayed(flushMovement, MOVEMENT_FLUSH_TIMEOUT)
+            // Throttle, not debounce: re-arming the timer on every event starves
+            // it completely when touch events arrive faster than the timeout
+            // (a 120 Hz panel reports every ~8 ms). Starved deltas then pile up
+            // past the HID report's +/-127 clamp and get silently truncated.
+            if (!flushScheduled) {
+                flushScheduled = true
+                handler.postDelayed(flushMovement, MOVEMENT_FLUSH_TIMEOUT)
+            }
             lastX = event.x
             lastY = event.y
             touchX = event.x
@@ -439,6 +448,9 @@ class TouchpadView @JvmOverloads constructor(
     private fun resetGesture() {
         endPinch()
         endScrollTouch()
+        // Callers cancel the pending flush, so make sure the throttle is not
+        // left latched on or no further movement would ever be sent.
+        flushScheduled = false
         isTouching = false
         isMultiTouch = false
         moved = false
@@ -468,6 +480,7 @@ class TouchpadView @JvmOverloads constructor(
     }
 
     private fun flushPendingMovement() {
+        flushScheduled = false
         if (pendingDeltaX != 0f || pendingDeltaY != 0f) {
             try {
                 mouseControlService?.moveCursor(pendingDeltaX, pendingDeltaY)
