@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
      */
     private val userServiceArgs = UserServiceArgs(
         ComponentName(BuildConfig.APPLICATION_ID, ShizukuUserService::class.java.name)
-    ).daemon(true).processNameSuffix("user_service").debuggable(false).version(7)
+    ).daemon(true).processNameSuffix("user_service").debuggable(false).version(8)
 
     private val userServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {

@@ -154,6 +154,12 @@ class TouchpadView @JvmOverloads constructor(
     private var lastDistance = 0f
     private var twoLastY = 0f
 
+    /** True while a real injected touch pinch is driving the zoom. */
+    private var pinchInjecting = false
+
+    /** Finger distance when the injected pinch began, for the absolute ratio. */
+    private var pinchBaseDistance = 0f
+
     // Three-finger tracking (average position at the start of the gesture)
     private var threeStartX = 0f
     private var threeStartY = 0f
@@ -273,6 +279,10 @@ class TouchpadView @JvmOverloads constructor(
             if (abs(distance - initialDistance) > touchSlop) {
                 mode = Mode.PINCH
                 lastDistance = initialDistance
+                // Prefer a real injected two-finger pinch: it is continuous,
+                // where a wheel notch is a discrete animated step, and every app
+                // understands two moving contacts.
+                beginPinch(initialDistance)
             } else if (abs(ay - twoLastY) > TWO_FINGER_SLOP_PX) {
                 mode = Mode.SCROLL
             }
@@ -284,8 +294,14 @@ class TouchpadView @JvmOverloads constructor(
                 lastDistance = distance
                 if (delta != 0f) {
                     multiMoved = true
-                    // Fingers moving apart (delta > 0) zooms in.
-                    sendZoom(delta * PINCH_SENSITIVITY)
+                    if (pinchInjecting) {
+                        // Absolute ratio rather than an accumulated delta, so a
+                        // dropped frame cannot make the zoom drift.
+                        pinchUpdate(distance / pinchBaseDistance)
+                    } else {
+                        // Fingers moving apart (delta > 0) zooms in.
+                        sendZoom(delta * PINCH_SENSITIVITY)
+                    }
                 }
             }
             Mode.SCROLL -> {
@@ -390,6 +406,7 @@ class TouchpadView @JvmOverloads constructor(
     }
 
     private fun resetGesture() {
+        endPinch()
         isTouching = false
         isMultiTouch = false
         moved = false
@@ -475,6 +492,40 @@ class TouchpadView @JvmOverloads constructor(
             mouseControlService?.sendZoom(amount)
         } catch (e: Exception) {
             Log.w(TAG, "Failed to send zoom", e)
+        }
+    }
+
+    /**
+     * Tries to start a real injected pinch at the display centre. If the service
+     * has no external display, or injection is unavailable, [pinchInjecting]
+     * stays false and the Ctrl+wheel fallback is used for the whole gesture.
+     */
+    private fun beginPinch(baseDistance: Float) {
+        pinchBaseDistance = if (baseDistance > 0f) baseDistance else 1f
+        pinchInjecting = try {
+            mouseControlService?.pinchBegin() == true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to begin pinch", e)
+            false
+        }
+        Log.i(TAG, "pinch begin: injecting=$pinchInjecting")
+    }
+
+    private fun pinchUpdate(scale: Float) {
+        try {
+            mouseControlService?.pinchUpdate(scale)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update pinch", e)
+        }
+    }
+
+    private fun endPinch() {
+        if (!pinchInjecting) return
+        pinchInjecting = false
+        try {
+            mouseControlService?.pinchEnd()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to end pinch", e)
         }
     }
 

@@ -14,6 +14,19 @@ interface IMouseControl {
     /** Pinch-to-zoom: positive zooms in, negative zooms out (Ctrl + wheel). */
     void sendZoom(float amount);
 
+    /**
+     * Starts a real two-finger pinch on the external display by injecting touch.
+     * Returns false when injection is unavailable, so the caller falls back to
+     * sendZoom().
+     */
+    boolean pinchBegin();
+
+    /** scale = current finger distance / distance when the gesture started. */
+    void pinchUpdate(float scale);
+
+    /** Lifts both injected contacts. Safe to call without a matching begin(). */
+    void pinchEnd();
+
     /** Injects a system BACK key event. */
     void sendBack();
 

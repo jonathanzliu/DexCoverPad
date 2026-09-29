@@ -78,15 +78,24 @@ cover display touch  ──►  MainActivity / TouchpadView
 | Press, hold, then drag | Drag (left button held; short buzz when it grabs) |
 | Two-finger tap | Right click |
 | Two-finger drag | Scroll |
-| Pinch in / out | Zoom (Ctrl + scroll wheel) |
+| Pinch in / out | Zoom (real injected touch pinch) |
 | Three-finger tap | System Back |
 | Three-finger swipe up | Recents |
 | Four-finger tap | Leave fullscreen |
-| Left / Right Click buttons | Click |
 | Fullscreen button | Hide all controls and the system bars |
+| Info button | Show or hide this gesture list |
 
-Pinch uses the keyboard device this app also registers over UHID, so it maps onto Ctrl + wheel. Recents and Back are
-injected into the external/DeX display with `input -d <display> keyevent`.
+Pinch injects two moving contacts as genuine touch events on the external
+display via `InputManager.injectInputEvent` — hidden API, reached by reflection
+from the Shizuku user service, which runs as shell and therefore holds
+`INJECT_EVENTS`. Apps see an ordinary two-finger gesture, so the zoom tracks the
+fingers continuously instead of snapping through the discrete animated steps a
+wheel notch produces. The gesture is anchored at the centre of the external
+display. When no external display is attached, or injection is unavailable, it
+falls back to Ctrl + wheel on the UHID keyboard.
+
+Recents and Back are injected into the external/DeX display with
+`input -d <display> keyevent`.
 
 Sensitivity is adjustable with the slider (0.1×–5.0×, applied on the app side).
 

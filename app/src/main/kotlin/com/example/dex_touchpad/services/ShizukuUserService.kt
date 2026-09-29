@@ -68,6 +68,10 @@ class ShizukuUserService : IMouseControl.Stub {
 
     private var ctrlHeld = false
 
+    /** Live touch pinch on the external display; null between gestures. */
+    private var pinchInjector: PinchInjector? = null
+    private var pinchActive = false
+
     private val handler = Handler(Looper.getMainLooper())
 
     /** Ctrl is released shortly after the pinch stops, like a real touchpad. */
@@ -245,6 +249,54 @@ class ShizukuUserService : IMouseControl.Stub {
     }
 
     /**
+     * Starts a real two-finger pinch on the external display.
+     *
+     * Returns false when there is no external display or injection is not
+     * usable, which tells the view to fall back to Ctrl+wheel zoom rather than
+     * silently doing nothing.
+     */
+    override fun pinchBegin(): Boolean {
+        if (!isReady) return false
+        return try {
+            val displayId = externalDisplayId()
+            if (displayId == null) {
+                Log.i(TAG, "pinchBegin: no external display, wheel fallback")
+                return false
+            }
+            val injector = PinchInjector(context, displayId)
+            if (!injector.begin()) return false
+            pinchInjector = injector
+            pinchActive = true
+            Log.i(TAG, "pinchBegin: injecting touch on display $displayId")
+            true
+        } catch (t: Throwable) {
+            Log.e(TAG, "pinchBegin failed", t)
+            false
+        }
+    }
+
+    override fun pinchUpdate(scale: Float) {
+        if (!pinchActive) return
+        try {
+            pinchInjector?.update(scale)
+        } catch (t: Throwable) {
+            Log.e(TAG, "pinchUpdate failed", t)
+        }
+    }
+
+    override fun pinchEnd() {
+        if (!pinchActive) return
+        pinchActive = false
+        try {
+            pinchInjector?.end()
+        } catch (t: Throwable) {
+            Log.e(TAG, "pinchEnd failed", t)
+        } finally {
+            pinchInjector = null
+        }
+    }
+
+    /**
      * Injects a discrete key on the external (DeX) display. A key event with the
      * default display id is delivered to this app on the phone instead of to
      * whatever is focused on the monitor.
@@ -321,6 +373,11 @@ class ShizukuUserService : IMouseControl.Stub {
     override fun destroy() {
         Log.i(TAG, "destroy() called")
         isReady = false
+        // Lift any injected contacts first: a stuck touch is worse than a stuck key.
+        try {
+            pinchEnd()
+        } catch (_: Throwable) {
+        }
         handler.removeCallbacks(releaseCtrlRunnable)
         try {
             if (ctrlHeld) {
