@@ -223,6 +223,15 @@ class TouchpadView @JvmOverloads constructor(
         isMultiTouch = true
         handler.removeCallbacks(dragArmRunnable)
 
+        // A finger arriving mid-gesture reclassifies the gesture, so lift any
+        // contacts already injected first. The framework allows only one touch
+        // stream per display, so a second ACTION_DOWN while the previous one is
+        // still down is rejected and neither gesture works.
+        if (pinchInjecting || scrollTouch) {
+            endPinch()
+            endScrollTouch()
+        }
+
         when (event.pointerCount) {
             2 -> {
                 mode = Mode.NONE

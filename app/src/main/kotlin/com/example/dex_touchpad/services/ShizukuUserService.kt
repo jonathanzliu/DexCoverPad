@@ -26,6 +26,9 @@ private const val PINCH_SPAN_FRACTION = 0.18f
 /** Contact separation for an injected two-finger scroll drag. */
 private const val SCROLL_SPAN_FRACTION = 0.10f
 
+/** Quiet period after the pointer stops before re-reading its position. */
+private const val CURSOR_REFRESH_DELAY_MS = 250L
+
 /** android.view.Display.TYPE_EXTERNAL (the constant itself is hidden API). */
 private const val DISPLAY_TYPE_EXTERNAL = 2
 
@@ -62,6 +65,17 @@ class ShizukuUserService : IMouseControl.Stub {
     /** Sub-pixel carry so slow drags are not swallowed by integer rounding. */
     private var lastX = 0f
     private var lastY = 0f
+
+    /** Latest pointer position read from the cursor layer, and which display it is on. */
+    @Volatile
+    private var cursorX = -1f
+    @Volatile
+    private var cursorY = -1f
+    @Volatile
+    private var cursorDisplay = -1
+
+    /** Debounced: refreshed once the pointer has been still for a moment. */
+    private val cursorRefresh = Runnable { queryCursorPosition() }
 
     /** Sub-notch carry so slow two-finger scrolls accumulate into wheel notches. */
     private var scrollCarry = 0f
@@ -204,6 +218,10 @@ class ShizukuUserService : IMouseControl.Stub {
 
             if (ix != 0 || iy != 0) {
                 UhidNative.nativeMove(ix, iy)
+                // Re-read the pointer position once it settles, so a following
+                // gesture can anchor on it without paying for the query itself.
+                handler.removeCallbacks(cursorRefresh)
+                handler.postDelayed(cursorRefresh, CURSOR_REFRESH_DELAY_MS)
             }
         } catch (t: Throwable) {
             Log.e(TAG, "moveCursor failed", t)
@@ -278,11 +296,11 @@ class ShizukuUserService : IMouseControl.Stub {
         if (!isReady) return false
         return try {
             val injector = newInjector("pinchBegin") ?: return false
-            val cx = injector.width / 2f
+            pinchHalfSpan = min(injector.width, injector.height) * PINCH_SPAN_FRACTION / 2f
+            val cx = anchorX(injector, pinchHalfSpan)
             val cy = injector.height / 2f
             anchorX = cx
             anchorY = cy
-            pinchHalfSpan = min(injector.width, injector.height) * PINCH_SPAN_FRACTION / 2f
             val started = injector.begin(
                 injector.clampX(cx - pinchHalfSpan), injector.clampY(cy),
                 injector.clampX(cx + pinchHalfSpan), injector.clampY(cy)
@@ -327,7 +345,9 @@ class ShizukuUserService : IMouseControl.Stub {
         return try {
             val injector = newInjector("scrollBegin") ?: return false
             scrollHalfSpan = min(injector.width, injector.height) * SCROLL_SPAN_FRACTION / 2f
-            scrollCenterX = injector.width / 2f
+            // Anchor on the pointer so a multi-pane app scrolls the pane the
+            // user is pointing at; vertically centred for travel both ways.
+            scrollCenterX = anchorX(injector, scrollHalfSpan)
             scrollCenterY = injector.height / 2f
             val started = injector.begin(
                 injector.clampX(scrollCenterX - scrollHalfSpan), injector.clampY(scrollCenterY),
@@ -365,11 +385,82 @@ class ShizukuUserService : IMouseControl.Stub {
     override fun scrollEnd() = endTouchGesture("scroll")
 
     /**
+     * Anchor x for a gesture: the pointer's real position when we know it,
+     * otherwise the middle of the display.
+     *
+     * Android exposes no cursor-position API, but the pointer is a
+     * SurfaceFlinger layer whose transform carries its x/y, so we read it from
+     * there (see [queryCursorPosition]) instead of guessing.
+     */
+    private fun anchorX(injector: TouchInjector, halfSpan: Float): Float {
+        val maxX = (injector.width - halfSpan).coerceAtLeast(halfSpan)
+        val x = if (cursorDisplay == injector.displayId && cursorX >= 0f) {
+            cursorX
+        } else {
+            injector.width / 2f
+        }
+        return x.coerceIn(halfSpan, maxX)
+    }
+
+    /**
+     * Reads the pointer position from the cursor layer in SurfaceFlinger.
+     *
+     * The pointer is drawn as an ordinary layer with
+     * {@code composition type=CURSOR}, whose transform translation is the
+     * position on its display. Running this costs about 0.2 s, so it is
+     * debounced to fire shortly after the pointer stops moving rather than on
+     * the movement hot path, and never during a gesture.
+     */
+    private fun queryCursorPosition() {
+        try {
+            val lines = ProcessBuilder("sh", "-c", "dumpsys SurfaceFlinger 2>/dev/null")
+                .redirectErrorStream(true)
+                .start()
+                .inputStream.bufferedReader()
+                .readLines()
+
+            // Walk backwards from the CURSOR line to the nearest transform
+            // matrix, which precedes it within the same layer block.
+            var i = lines.indexOfFirst { it.contains("composition type=CURSOR") }
+            if (i < 0) return
+            while (i >= 0 && !lines[i].contains("geomLayerTransform")) i--
+            if (i < 0 || i + 2 >= lines.size) return
+
+            // Matrix rows: [1 0 tx] / [0 1 ty] / [0 0 1]
+            val row0 = parseFloats(lines[i + 1])
+            val row1 = parseFloats(lines[i + 2])
+            if (row0.size < 3 || row1.size < 3) return
+
+            // Layer stack tells us which display the pointer is on.
+            var stack = -1
+            var j = i
+            while (j < lines.size && !lines[j].contains("composition type=CURSOR")) {
+                val idx = lines[j].indexOf("layerStack=")
+                if (idx >= 0) {
+                    stack = lines[j].substring(idx + "layerStack=".length)
+                        .takeWhile { it.isDigit() }.toIntOrNull() ?: -1
+                }
+                j++
+            }
+
+            @Suppress("UNUSED_EXPRESSION")
+            cursorDisplay = stack
+            cursorX = row0[2]
+            cursorY = row1[2]
+            Log.i(TAG, "cursor at ($cursorX, $cursorY) on display $cursorDisplay")
+        } catch (t: Throwable) {
+            Log.w(TAG, "Could not read the pointer position", t)
+        }
+    }
+
+    private fun parseFloats(line: String): List<Float> =
+        line.trim().split(Regex("\\s+")).mapNotNull { it.toFloatOrNull() }
+
+    /**
      * Builds an injector for the external display, or returns null (with a log
      * saying why) so the caller can fall back to the wheel devices.
      */
-    private fun newInjector(label: String): TouchInjector? {
-        val displayId = externalDisplayId()
+    private fun newInjector(label: String): TouchInjector? {        val displayId = externalDisplayId()
         if (displayId == null) {
             Log.i(TAG, "$label: no external display, wheel fallback")
             return null

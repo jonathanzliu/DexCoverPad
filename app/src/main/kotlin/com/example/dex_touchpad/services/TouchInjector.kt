@@ -31,7 +31,7 @@ import kotlin.math.min
  */
 internal class TouchInjector(
     context: Context?,
-    private val displayId: Int
+    val displayId: Int
 ) {
 
     private val inputManager: Any? = context?.getSystemService(Context.INPUT_SERVICE)

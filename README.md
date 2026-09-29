@@ -85,14 +85,23 @@ cover display touch  ──►  MainActivity / TouchpadView
 | Fullscreen button | Hide all controls and the system bars |
 | Info button | Show or hide this gesture list |
 
-Pinch injects two moving contacts as genuine touch events on the external
-display via `InputManager.injectInputEvent` — hidden API, reached by reflection
-from the Shizuku user service, which runs as shell and therefore holds
-`INJECT_EVENTS`. Apps see an ordinary two-finger gesture, so the zoom tracks the
-fingers continuously instead of snapping through the discrete animated steps a
-wheel notch produces. The gesture is anchored at the centre of the external
-display. When no external display is attached, or injection is unavailable, it
-falls back to Ctrl + wheel on the UHID keyboard.
+Pinch and two-finger scroll both inject two moving contacts as genuine touch
+events on the external display via `InputManager.injectInputEvent` — hidden API,
+reached by reflection from the Shizuku user service, which runs as shell and
+therefore holds `INJECT_EVENTS`. Apps see an ordinary gesture, so zoom tracks
+the fingers and scrolling gets real momentum: the app's own velocity tracker
+computes the fling, and overscroll behaves natively, none of which a discrete
+wheel notch can do.
+
+Both gestures anchor on the pointer, so a multi-pane app scrolls the pane being
+pointed at. Android exposes no cursor-position API, but the pointer is an
+ordinary SurfaceFlinger layer with `composition type=CURSOR`, whose transform
+carries its x/y on that display; the service reads the position shortly after
+the pointer stops moving, so gestures cost nothing extra. When the pointer is
+not on the external display the gesture falls back to the display centre.
+
+When no external display is attached, or injection is unavailable, pinch falls
+back to Ctrl + wheel on the UHID keyboard and scroll to the wheel device.
 
 Recents and Back are injected into the external/DeX display with
 `input -d <display> keyevent`.

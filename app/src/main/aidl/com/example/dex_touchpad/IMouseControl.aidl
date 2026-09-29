@@ -17,7 +17,7 @@ interface IMouseControl {
     /**
      * Starts a real two-finger pinch on the external display by injecting touch.
      * Returns false when injection is unavailable, so the caller falls back to
-     * sendZoom().
+     * sendZoom(). Anchored on the pointer position.
      */
     boolean pinchBegin();
 
@@ -31,7 +31,8 @@ interface IMouseControl {
      * Starts a real two-finger drag on the external display. The app's own touch
      * pipeline turns it into a scroll and computes the fling, so momentum is the
      * platform's rather than something we simulate. False means fall back to
-     * sendScroll() on the wheel device.
+     * sendScroll() on the wheel device. Anchored on the pointer position, so a
+     * multi-pane app scrolls the pane being pointed at.
      */
     boolean scrollBegin();
 
