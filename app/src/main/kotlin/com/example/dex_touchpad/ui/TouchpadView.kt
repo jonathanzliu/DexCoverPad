@@ -25,7 +25,6 @@ private const val TAG = "TouchpadView"
 private const val PREFS_NAME = "dex_touchpad_prefs"
 private const val PREF_SENSITIVITY = "sensitivity"
 private const val DEFAULT_SENSITIVITY = 1.0f
-private const val MAX_DELTA_PER_EVENT = 50.0f
 /** Wheel notches per scrolled pixel; halved from 0.1 because it scrolled too fast. */
 private const val SCROLL_SENSITIVITY = 0.05f
 
@@ -37,8 +36,6 @@ private const val TWO_FINGER_SLOP_PX = 10f
 
 /** Three-finger swipe distance that triggers Recents. */
 private const val THREE_SWIPE_THRESHOLD_PX = 90f
-
-private const val MOVEMENT_FLUSH_TIMEOUT = 16L
 
 /** After a tap, a second touch within this window starts a drag. */
 private const val TAP_DRAG_WINDOW_MS = 400L
@@ -135,11 +132,6 @@ class TouchpadView @JvmOverloads constructor(
     private var downY = 0f
     private var touchX = 0f
     private var touchY = 0f
-    private var pendingDeltaX = 0f
-    private var pendingDeltaY = 0f
-
-    /** True while a coalesced movement flush is already queued. */
-    private var flushScheduled = false
 
     private var isTouching = false
     private var isMultiTouch = false
@@ -178,8 +170,6 @@ class TouchpadView @JvmOverloads constructor(
         }
     }
 
-    private val flushMovement = Runnable { flushPendingMovement() }
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(event)
@@ -200,8 +190,6 @@ class TouchpadView @JvmOverloads constructor(
         buttonHeld = false
         maxPointers = 1
         mode = Mode.NONE
-        pendingDeltaX = 0f
-        pendingDeltaY = 0f
         lastX = event.x
         lastY = event.y
         downX = event.x
@@ -355,8 +343,6 @@ class TouchpadView @JvmOverloads constructor(
         // After a multi-finger gesture the remaining finger must not jump the cursor.
         if (mode != Mode.NONE) return
 
-        val dx = event.x - lastX
-        val dy = event.y - lastY
         // Distance from where the finger went down, NOT the per-event delta:
         // a slow drag produces many tiny deltas that never exceed the slop
         // individually.
@@ -375,15 +361,16 @@ class TouchpadView @JvmOverloads constructor(
         }
 
         if (moved) {
-            pendingDeltaX += (dx * sensitivity).coerceIn(-MAX_DELTA_PER_EVENT, MAX_DELTA_PER_EVENT)
-            pendingDeltaY += (dy * sensitivity).coerceIn(-MAX_DELTA_PER_EVENT, MAX_DELTA_PER_EVENT)
-            // Throttle, not debounce: re-arming the timer on every event starves
-            // it completely when touch events arrive faster than the timeout
-            // (a 120 Hz panel reports every ~8 ms). Starved deltas then pile up
-            // past the HID report's +/-127 clamp and get silently truncated.
-            if (!flushScheduled) {
-                flushScheduled = true
-                handler.postDelayed(flushMovement, MOVEMENT_FLUSH_TIMEOUT)
+            // Forward every event as it arrives. Coalescing on a timer capped the
+            // cursor at ~60 reports/s with main-looper jitter, which reads as
+            // choppy next to a real mouse; the panel reports at 120 Hz or more,
+            // and the user service accumulates the sub-pixel remainder, so slow
+            // drags stay precise without batching. Large deltas are split into
+            // +/-127 HID reports there, so nothing is clamped away here.
+            val dx = (event.x - lastX) * sensitivity
+            val dy = (event.y - lastY) * sensitivity
+            if (dx != 0f || dy != 0f) {
+                sendMove(dx, dy)
             }
             lastX = event.x
             lastY = event.y
@@ -408,8 +395,6 @@ class TouchpadView @JvmOverloads constructor(
 
     private fun onUp() {
         handler.removeCallbacks(dragArmRunnable)
-        handler.removeCallbacks(flushMovement)
-        flushPendingMovement()
 
         if (buttonHeld) {
             sendButton(BUTTON_LEFT, false)
@@ -435,9 +420,6 @@ class TouchpadView @JvmOverloads constructor(
 
     private fun onCancel() {
         handler.removeCallbacks(dragArmRunnable)
-        handler.removeCallbacks(flushMovement)
-        pendingDeltaX = 0f
-        pendingDeltaY = 0f
         if (buttonHeld) {
             sendButton(BUTTON_LEFT, false)
             buttonHeld = false
@@ -448,17 +430,12 @@ class TouchpadView @JvmOverloads constructor(
     private fun resetGesture() {
         endPinch()
         endScrollTouch()
-        // Callers cancel the pending flush, so make sure the throttle is not
-        // left latched on or no further movement would ever be sent.
-        flushScheduled = false
         isTouching = false
         isMultiTouch = false
         moved = false
         multiMoved = false
         mode = Mode.NONE
         maxPointers = 0
-        pendingDeltaX = 0f
-        pendingDeltaY = 0f
         invalidate()
     }
 
@@ -479,16 +456,11 @@ class TouchpadView @JvmOverloads constructor(
         return if (event.pointerCount == 0) 0f else sum / event.pointerCount
     }
 
-    private fun flushPendingMovement() {
-        flushScheduled = false
-        if (pendingDeltaX != 0f || pendingDeltaY != 0f) {
-            try {
-                mouseControlService?.moveCursor(pendingDeltaX, pendingDeltaY)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to send movement", e)
-            }
-            pendingDeltaX = 0f
-            pendingDeltaY = 0f
+    private fun sendMove(deltaX: Float, deltaY: Float) {
+        try {
+            mouseControlService?.moveCursor(deltaX, deltaY)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send movement", e)
         }
     }
 

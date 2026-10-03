@@ -29,6 +29,12 @@ private const val SCROLL_SPAN_FRACTION = 0.10f
 /** Quiet period after the pointer stops before re-reading its position. */
 private const val CURSOR_REFRESH_DELAY_MS = 250L
 
+/**
+ * Most a single relative HID report can carry per axis (Logical Minimum/Maximum
+ * in the report descriptor). Longer moves are split across several reports.
+ */
+private const val HID_AXIS_MAX = 127
+
 /** android.view.Display.TYPE_EXTERNAL (the constant itself is hidden API). */
 private const val DISPLAY_TYPE_EXTERNAL = 2
 
@@ -217,7 +223,20 @@ class ShizukuUserService : IMouseControl.Stub {
             lastY = fy - iy
 
             if (ix != 0 || iy != 0) {
-                UhidNative.nativeMove(ix, iy)
+                // A report carries at most +/-127 per axis. Send the movement in
+                // chunks so a fast flick (or a high sensitivity setting) is never
+                // truncated, which would make the cursor lag the finger. The
+                // chunks are written back to back; the kernel sums the relative
+                // reports, so the pointer lands exactly where it should.
+                var rx = ix
+                var ry = iy
+                while (rx != 0 || ry != 0) {
+                    val stepX = rx.coerceIn(-HID_AXIS_MAX, HID_AXIS_MAX)
+                    val stepY = ry.coerceIn(-HID_AXIS_MAX, HID_AXIS_MAX)
+                    UhidNative.nativeMove(stepX, stepY)
+                    rx -= stepX
+                    ry -= stepY
+                }
                 // Re-read the pointer position once it settles, so a following
                 // gesture can anchor on it without paying for the query itself.
                 handler.removeCallbacks(cursorRefresh)
